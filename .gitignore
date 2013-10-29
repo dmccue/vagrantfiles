@@ -18,8 +18,8 @@ _yardoc
 doc/
 
 
-./etc-chef-server/*
-./cookbooks/*
+etc-chef-server/*
+cookbooks/*
 dsm1
 cookbooks
 .*
