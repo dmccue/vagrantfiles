@@ -16,3 +16,10 @@ tmp
 .yardoc
 _yardoc
 doc/
+
+
+./etc-chef-server/*
+./cookbooks/*
+dsm1
+cookbooks
+.*

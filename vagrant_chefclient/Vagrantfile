@@ -11,10 +11,9 @@ VAGRANTFILE_API_VERSION = "2"
 
 Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 
-	config.vbguest.auto_update = false
+	config.vbguest.auto_update = false # Required to disable automatic update of guest additions
 	config.ssh.forward_agent = true	
 	
-
 	config.vm.provider "virtualbox" do |vb|
 		vb.customize [
 			"modifyvm", :id,
@@ -38,7 +37,6 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 		
 		#Shared folders
 		testc.vm.synced_folder host_cache_path, guest_cache_path
-		
 		
 		testc.vm.provision "chef_client" do |chef|
 			chef.chef_server_url = "https://192.168.50.2:4000/"
