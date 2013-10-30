@@ -39,6 +39,9 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 		tests.vm.synced_folder host_cache_path, guest_cache_path # Allow /var/chef/cache caching
 		tests.vm.synced_folder "../etc-chef-server", "/etc/chef-server" #This is to allow the chef-client to retrieve the chef-server's chef-validator.pem file
 		
+		#Disable firewall (firewall rules would need added for production)
+		tests.vm.provision "shell", inline: "service iptables stop"
+		
 		tests.vm.provision :chef_solo do |chef|
 			#chef.log_level = :debug
 			chef.cookbooks_path = "../cookbooks"	
@@ -61,17 +64,19 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 			}									
 		end
 		
+		# Comment this out on first run until ../etc-chef-server/chef-validator.pem is created
 		tests.vm.provision "chef_client" do |chef|
-			chef.chef_server_url = "https://192.168.50.2:4000/"
-			chef.validation_key_path = "../etc-chef-server/chef-validator.pem"
-		end
+            chef.chef_server_url = "https://192.168.50.2:4000/"
+            chef.validation_key_path = "../etc-chef-server/chef-validator.pem"
+        end
 		
+		# Post-install
 		#tests.vm.provision "shell", inline: "yum install telnet -y"
-		tests.vm.provision "shell", inline: "service iptables stop"
-		
+		# Knife setup
 		#tests.vm.provision "shell", inline: "cp -f /etc/chef-server/admin.pem /etc/chef-server/chef-validator.pem /etc/chef"
-		#^^^ Run knife configure -i, use defaults but specify https://tests:4000 and use admin password from website
+		#^^^ Run knife configure -i, use defaults but specify https://192.168.50.2:4000 and use admin password from website
 		#tests.vm.provision "shell", inline: "chef-server-ctl reconfigure; chef-server-ctl restart"
+
 	end
 
 end
