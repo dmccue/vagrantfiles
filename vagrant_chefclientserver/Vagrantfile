@@ -1,0 +1,113 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+#Global Variables
+CHEF_SERVER_PROTOCOL="https"
+CHEF_SERVER_IP="192.168.50.2"
+CHEF_SERVER_PORT="4000"
+VAGRANTFILE_API_VERSION = "2"
+
+# Setup chef server download cache
+host_cache_path = File.expand_path("../../.cache", __FILE__)
+guest_cache_path = "/var/chef/cache"
+FileUtils.mkdir(host_cache_path) unless File.exist?(host_cache_path)
+
+
+Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
+
+	config.ssh.forward_agent = true	
+
+	config.vm.provider "virtualbox" do |vb|
+		vb.vbguest.auto_update = false # Required to disable automatic update of guest additions
+		vb.customize [
+			"modifyvm", :id,
+			"--nictype1", "Am79C973",
+			"--ioapic", "on",
+			"--rtcuseutc", "on",
+			"--cpus", "4",
+			"--memory", "2048"
+		]
+		vb.vm.box = "centos64_64"
+		vb.box_url = "https://opscode-vm.s3.amazonaws.com/vagrant/opscode_centos-6.4_chef-11.4.4.box"
+		#vb.gui = true
+	end
+
+        config.vm.provider :rackspace do |rs|
+                rs.username = ""
+                rs.api_key = ""
+                rs.flavor = /512MB/
+                rs.image = /CentOS 6.4/
+        end
+	
+	
+	#Disable firewall (firewall rules would need added for production)
+	config.vm.provision "shell", inline: "service iptables stop"
+		
+	config.vm.define "tests" do |tests|
+		tests.vm.host_name = "tests"
+		
+		#Network port forwards
+		tests.vm.network "private_network", ip: CHEF_SERVER_IP
+		# Access chef server by browsing to https://192.168.50.2:4000
+		
+		#Shared folders
+		tests.vm.synced_folder host_cache_path, guest_cache_path # Allow /var/chef/cache caching
+		tests.vm.synced_folder "../etc-chef-server", "/etc/chef-server" #This is to allow the chef-client to retrieve the chef-server's chef-validator.pem file
+		
+		tests.vm.provision :chef_solo do |chef|
+			#chef.log_level = :debug
+			chef.cookbooks_path = "../cookbooks"	
+			chef.provisioning_path = guest_cache_path # Cache downloaded chef servers in ../.cache
+			chef.add_recipe "chef-server"
+			
+			chef.json = { 
+				:chef_server => {
+					:server_url => "#{CHEF_SERVER_PROTOCOL}://#{CHEF_SERVER_IP}:#{CHEF_SERVER_PORT}",
+					:webui_enabled => true
+				},
+				"chef-server" => {
+					"api_fqdn" => "localhost",
+					"configuration" => {
+						"nginx" => {
+							"ssl_port" => CHEF_SERVER_PORT
+						}
+					}
+				}
+			}									
+		end
+		
+		# Comment this out on first run until ../etc-chef-server/chef-validator.pem is created
+		tests.vm.provision "chef_client" do |chef|
+            		chef.chef_server_url = "#{CHEF_SERVER_PROTOCOL}://#{CHEF_SERVER_IP}:#{CHEF_SERVER_PORT}"
+            		chef.validation_key_path = "../etc-chef-server/chef-validator.pem"
+        	end
+	end
+
+        config.vm.define "testc" do |testc|
+                testc.vm.box_url = "https://opscode-vm.s3.amazonaws.com/vagrant/opscode_centos-6.4_chef-11.4.4.box"
+
+		# Clear out existing chef keys
+		testc.vm.provision "shell", inline: "if [ ! -f /tmp/rekey ]; then touch /tmp/rekey; rm -f /etc/chef/*; echo "REKEY: deleted previous keys"; fi"
+                #Network port forwards
+                testc.vm.network "private_network", ip: "192.168.50.3"
+
+		# Clear out existing chef keys
+		testc.vm.provision "shell", inline: "if [ ! -f /tmp/rekey ]; then touch /tmp/rekey; rm -f /etc/chef/*; echo "REKEY: deleted previous keys"; fi"
+		# Provision chef client
+                testc.vm.provision "chef_client" do |chef|
+                        chef.chef_server_url = "#{CHEF_SERVER_PROTOCOL}://#{CHEF_SERVER_IP}:#{CHEF_SERVER_PORT}"
+                        chef.validation_key_path = "../etc-chef-server/chef-validator.pem"
+                end
+
+        end
+
+		
+		# Post-install
+		#tests.vm.provision "shell", inline: "yum install telnet -y"
+		# Knife setup
+		#tests.vm.provision "shell", inline: "cp -f /etc/chef-server/admin.pem /etc/chef-server/chef-validator.pem /etc/chef"
+		#^^^ Run knife configure -i, use defaults but specify https://192.168.50.2:4000 and use admin password from website
+		#tests.vm.provision "shell", inline: "chef-server-ctl reconfigure; chef-server-ctl restart"
+
+
+end
