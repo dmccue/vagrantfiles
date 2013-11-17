@@ -17,7 +17,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 
 	config.ssh.forward_agent = true	
 
-	config.vm.provider "virtualbox" do |vb|
+	config.vm.provider :virtualbox do |vb|
 		vb.vbguest.auto_update = false # Required to disable automatic update of guest additions
 		vb.customize [
 			"modifyvm", :id,
@@ -33,6 +33,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 	end
 
         config.vm.provider :rackspace do |rs|
+		rs.vm.box = "rac_dummy"
                 rs.username = ""
                 rs.api_key = ""
                 rs.flavor = /512MB/
@@ -43,7 +44,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 	#Disable firewall (firewall rules would need added for production)
 	config.vm.provision "shell", inline: "service iptables stop"
 		
-	config.vm.define "tests" do |tests|
+	config.vm.define "tests", primary: true do |tests|
 		tests.vm.host_name = "tests"
 		
 		#Network port forwards
@@ -53,13 +54,15 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 		#Shared folders
 		tests.vm.synced_folder host_cache_path, guest_cache_path # Allow /var/chef/cache caching
 		tests.vm.synced_folder "../etc-chef-server", "/etc/chef-server" #This is to allow the chef-client to retrieve the chef-server's chef-validator.pem file
-		
+
+		# Install chef server using chef solo		
 		tests.vm.provision :chef_solo do |chef|
 			#chef.log_level = :debug
 			chef.cookbooks_path = "../cookbooks"	
 			chef.provisioning_path = guest_cache_path # Cache downloaded chef servers in ../.cache
 			chef.add_recipe "chef-server"
-			
+		
+	
 			chef.json = { 
 				:chef_server => {
 					:server_url => "#{CHEF_SERVER_PROTOCOL}://#{CHEF_SERVER_IP}:#{CHEF_SERVER_PORT}",
@@ -84,15 +87,13 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 	end
 
         config.vm.define "testc" do |testc|
-                testc.vm.box_url = "https://opscode-vm.s3.amazonaws.com/vagrant/opscode_centos-6.4_chef-11.4.4.box"
+		testc.vm.host_name = "testc"
 
-		# Clear out existing chef keys
-		testc.vm.provision "shell", inline: "if [ ! -f /tmp/rekey ]; then touch /tmp/rekey; rm -f /etc/chef/*; echo "REKEY: deleted previous keys"; fi"
                 #Network port forwards
                 testc.vm.network "private_network", ip: "192.168.50.3"
 
-		# Clear out existing chef keys
-		testc.vm.provision "shell", inline: "if [ ! -f /tmp/rekey ]; then touch /tmp/rekey; rm -f /etc/chef/*; echo "REKEY: deleted previous keys"; fi"
+                # Clear out existing chef keys
+                testc.vm.provision "shell", inline: 'if [ ! -f /tmp/rekey ]; then touch /tmp/rekey; rm -f /etc/chef/*; echo "REKEY: deleted previous keys"; fi'
 		# Provision chef client
                 testc.vm.provision "chef_client" do |chef|
                         chef.chef_server_url = "#{CHEF_SERVER_PROTOCOL}://#{CHEF_SERVER_IP}:#{CHEF_SERVER_PORT}"
