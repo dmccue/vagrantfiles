@@ -15,8 +15,16 @@ FileUtils.mkdir(host_cache_path) unless File.exist?(host_cache_path)
 
 Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 
+	# Setup boxes as follows:
+	# vagrant box add centos6_64 https://opscode-vm.s3.amazonaws.com/vagrant/opscode_centos-6.4_chef-11.4.4.box
+	# echo -e "{\n    \"provider\": \"rackspace\"\n}\n" > metadata.json; tar czvf rackspace.box ./metadata.json 
+	# vagrant box add centos6_64 rackspace.box 
+	config.vm.box = 'centos6_64'
 	config.ssh.forward_agent = true	
 
+	#
+	# Provisioners Virtualbox and Rackspace
+	#
 	config.vm.provider :virtualbox do |vb|
 		vb.vbguest.auto_update = false # Required to disable automatic update of guest additions
 		vb.customize [
@@ -24,26 +32,34 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 			"--nictype1", "Am79C973",
 			"--ioapic", "on",
 			"--rtcuseutc", "on",
-			"--cpus", "4",
-			"--memory", "2048"
+			"--cpus", "2",
+			"--memory", "1024"
 		]
-		vb.vm.box = "centos64_64"
-		vb.box_url = "https://opscode-vm.s3.amazonaws.com/vagrant/opscode_centos-6.4_chef-11.4.4.box"
 		#vb.gui = true
 	end
 
+	Vagrant.require_plugin "vagrant-rackspace"
         config.vm.provider :rackspace do |rs|
-		rs.vm.box = "rac_dummy"
                 rs.username = ""
                 rs.api_key = ""
                 rs.flavor = /512MB/
                 rs.image = /CentOS 6.4/
         end
 	
-	
+	#Global Provisioning/Shared folders	
 	#Disable firewall (firewall rules would need added for production)
 	config.vm.provision "shell", inline: "service iptables stop"
-		
+	tests.vm.synced_folder host_cache_path, guest_cache_path # Allow /var/chef/cache caching
+
+        # Comment this out on first run until ../etc-chef-server/chef-validator.pem is created
+        config.vm.provision "chef_client" do |chef|
+            chef.chef_server_url = "#{CHEF_SERVER_PROTOCOL}://#{CHEF_SERVER_IP}:#{CHEF_SERVER_PORT}"
+            chef.validation_key_path = "../etc-chef-server/chef-validator.pem"
+        end
+
+
+
+	# Chef Server	
 	config.vm.define "tests", primary: true do |tests|
 		tests.vm.host_name = "tests"
 		
@@ -79,13 +95,10 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 			}									
 		end
 		
-		# Comment this out on first run until ../etc-chef-server/chef-validator.pem is created
-		tests.vm.provision "chef_client" do |chef|
-            		chef.chef_server_url = "#{CHEF_SERVER_PROTOCOL}://#{CHEF_SERVER_IP}:#{CHEF_SERVER_PORT}"
-            		chef.validation_key_path = "../etc-chef-server/chef-validator.pem"
-        	end
 	end
 
+
+	# Chef Client
         config.vm.define "testc" do |testc|
 		testc.vm.host_name = "testc"
 
@@ -94,21 +107,14 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 
                 # Clear out existing chef keys
                 testc.vm.provision "shell", inline: 'if [ ! -f /tmp/rekey ]; then touch /tmp/rekey; rm -f /etc/chef/*; echo "REKEY: deleted previous keys"; fi'
-		# Provision chef client
-                testc.vm.provision "chef_client" do |chef|
-                        chef.chef_server_url = "#{CHEF_SERVER_PROTOCOL}://#{CHEF_SERVER_IP}:#{CHEF_SERVER_PORT}"
-                        chef.validation_key_path = "../etc-chef-server/chef-validator.pem"
-                end
 
         end
-
 		
-		# Post-install
-		#tests.vm.provision "shell", inline: "yum install telnet -y"
-		# Knife setup
-		#tests.vm.provision "shell", inline: "cp -f /etc/chef-server/admin.pem /etc/chef-server/chef-validator.pem /etc/chef"
-		#^^^ Run knife configure -i, use defaults but specify https://192.168.50.2:4000 and use admin password from website
-		#tests.vm.provision "shell", inline: "chef-server-ctl reconfigure; chef-server-ctl restart"
-
+	# Post-install
+	#tests.vm.provision "shell", inline: "yum install telnet -y"
+	# Knife setup
+	#tests.vm.provision "shell", inline: "cp -f /etc/chef-server/admin.pem /etc/chef-server/chef-validator.pem /etc/chef"
+	#^^^ Run knife configure -i, use defaults but specify https://192.168.50.2:4000 and use admin password from website
+	#tests.vm.provision "shell", inline: "chef-server-ctl reconfigure; chef-server-ctl restart"
 
 end
