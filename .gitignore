@@ -19,7 +19,7 @@ doc/
 
 
 etc-chef-server/*
-cookbooks/*
+#cookbooks/*
 dsm1
-cookbooks
+#cookbooks
 .*
