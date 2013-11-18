@@ -49,26 +49,23 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 	#Global Provisioning/Shared folders	
 	#Disable firewall (firewall rules would need added for production)
 	config.vm.provision "shell", inline: "service iptables stop"
-	tests.vm.synced_folder host_cache_path, guest_cache_path # Allow /var/chef/cache caching
+	config.vm.synced_folder host_cache_path, guest_cache_path # Allow /var/chef/cache caching
 
         # Comment this out on first run until ../etc-chef-server/chef-validator.pem is created
-        config.vm.provision "chef_client" do |chef|
+        config.vm.provision :chef_client do |chef|
             chef.chef_server_url = "#{CHEF_SERVER_PROTOCOL}://#{CHEF_SERVER_IP}:#{CHEF_SERVER_PORT}"
             chef.validation_key_path = "../etc-chef-server/chef-validator.pem"
         end
-
-
 
 	# Chef Server	
 	config.vm.define "tests", primary: true do |tests|
 		tests.vm.host_name = "tests"
 		
-		#Network port forwards
+		#Network config
 		tests.vm.network "private_network", ip: CHEF_SERVER_IP
 		# Access chef server by browsing to https://192.168.50.2:4000
 		
 		#Shared folders
-		tests.vm.synced_folder host_cache_path, guest_cache_path # Allow /var/chef/cache caching
 		tests.vm.synced_folder "../etc-chef-server", "/etc/chef-server" #This is to allow the chef-client to retrieve the chef-server's chef-validator.pem file
 
 		# Install chef server using chef solo		
@@ -86,14 +83,14 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 				},
 				"chef-server" => {
 					"api_fqdn" => "localhost",
-					"configuration" => {
-						"nginx" => {
-							"ssl_port" => CHEF_SERVER_PORT
+						"configuration" => {
+							"nginx" => {
+								"ssl_port" => CHEF_SERVER_PORT
+							}
 						}
 					}
-				}
-			}									
-		end
+				}									
+			end
 		
 	end
 
@@ -102,7 +99,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
         config.vm.define "testc" do |testc|
 		testc.vm.host_name = "testc"
 
-                #Network port forwards
+                #Network config
                 testc.vm.network "private_network", ip: "192.168.50.3"
 
                 # Clear out existing chef keys
