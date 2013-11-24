@@ -1,6 +1,10 @@
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
 
+#Prerequisites
+#vagrant plugin install vagrant-vbguest
+
+
 #Global Variables
 CHEF_SERVER_PROTOCOL="https"
 CHEF_SERVER_IP="192.168.50.2"
@@ -26,7 +30,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 	# Provisioners Virtualbox and Rackspace
 	#
 	config.vm.provider :virtualbox do |vb|
-		vb.vbguest.auto_update = false # Required to disable automatic update of guest additions
+		vb.vbguest.auto_update = true # Required to disable automatic update of guest additions
 		vb.customize [
 			"modifyvm", :id,
 			"--nictype1", "Am79C973",
@@ -51,25 +55,19 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 	config.vm.provision "shell", inline: "service iptables stop"
 	config.vm.synced_folder host_cache_path, guest_cache_path # Allow /var/chef/cache caching
 
-        # Comment this out on first run until ../etc-chef-server/chef-validator.pem is created
-        config.vm.provision :chef_client do |chef|
-            chef.chef_server_url = "#{CHEF_SERVER_PROTOCOL}://#{CHEF_SERVER_IP}:#{CHEF_SERVER_PORT}"
-            chef.validation_key_path = "../etc-chef-server/chef-validator.pem"
-        end
-
 	# Chef Server	
-	config.vm.define "tests", primary: true do |tests|
-		tests.vm.host_name = "tests"
+	config.vm.define "chefserver", primary: true do |chefserver|
+		chefserver.vm.host_name = "chefserver"
 		
 		#Network config
-		tests.vm.network "private_network", ip: CHEF_SERVER_IP
+		chefserver.vm.network "private_network", ip: CHEF_SERVER_IP
 		# Access chef server by browsing to https://192.168.50.2:4000
 		
 		#Shared folders
-		tests.vm.synced_folder "../etc-chef-server", "/etc/chef-server" #This is to allow the chef-client to retrieve the chef-server's chef-validator.pem file
+		chefserver.vm.synced_folder "../etc-chef-server", "/etc/chef-server" #This is to allow the chef-client to retrieve the chef-server's chef-validator.pem file
 
 		# Install chef server using chef solo		
-		tests.vm.provision :chef_solo do |chef|
+		chefserver.vm.provision :chef_solo do |chef|
 			#chef.log_level = :debug
 			chef.cookbooks_path = "../cookbooks"	
 			chef.provisioning_path = guest_cache_path # Cache downloaded chef servers in ../.cache
@@ -83,35 +81,47 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 				},
 				"chef-server" => {
 					"api_fqdn" => "localhost",
-						"configuration" => {
-							"nginx" => {
-								"ssl_port" => CHEF_SERVER_PORT
-							}
+					"configuration" => {
+						"nginx" => {
+							"ssl_port" => CHEF_SERVER_PORT
 						}
 					}
-				}									
-			end
-		
+				}
+			}									
+		end
+	
+                # Comment this out on first run until ../etc-chef-server/chef-validator.pem is created
+                #chefserver.vm.provision :chef_client do |chef|
+                #        chef.chef_server_url = "#{CHEF_SERVER_PROTOCOL}://#{CHEF_SERVER_IP}:#{CHEF_SERVER_PORT}"
+                #        chef.validation_key_path = "../etc-chef-server/chef-validator.pem"
+                #end
+	
 	end
 
 
 	# Chef Client
-        config.vm.define "testc" do |testc|
-		testc.vm.host_name = "testc"
+        config.vm.define "chefclient" do |chefclient|
+		chefclient.vm.host_name = "chefclient"
 
                 #Network config
-                testc.vm.network "private_network", ip: "192.168.50.3"
+                chefclient.vm.network "private_network", ip: "192.168.50.3"
 
                 # Clear out existing chef keys
-                testc.vm.provision "shell", inline: 'if [ ! -f /tmp/rekey ]; then touch /tmp/rekey; rm -f /etc/chef/*; echo "REKEY: deleted previous keys"; fi'
+                chefclient.vm.provision "shell", inline: 'if [ ! -f /tmp/rekey ]; then touch /tmp/rekey; rm -f /etc/chef/*; echo "REKEY: deleted previous keys"; fi'
+
+                # Comment this out on first run until ../etc-chef-server/chef-validator.pem is created
+                chefclient.vm.provision :chef_client do |chef|
+                        chef.chef_server_url = "#{CHEF_SERVER_PROTOCOL}://#{CHEF_SERVER_IP}:#{CHEF_SERVER_PORT}"
+                        chef.validation_key_path = "../etc-chef-server/chef-validator.pem"
+                end
 
         end
 		
 	# Post-install
-	#tests.vm.provision "shell", inline: "yum install telnet -y"
+	#chefserver.vm.provision "shell", inline: "yum install telnet -y"
 	# Knife setup
-	#tests.vm.provision "shell", inline: "cp -f /etc/chef-server/admin.pem /etc/chef-server/chef-validator.pem /etc/chef"
+	#chefserver.vm.provision "shell", inline: "cp -f /etc/chef-server/admin.pem /etc/chef-server/chef-validator.pem /etc/chef"
 	#^^^ Run knife configure -i, use defaults but specify https://192.168.50.2:4000 and use admin password from website
-	#tests.vm.provision "shell", inline: "chef-server-ctl reconfigure; chef-server-ctl restart"
+	#chefserver.vm.provision "shell", inline: "chef-server-ctl reconfigure; chef-server-ctl restart"
 
 end
