@@ -2,35 +2,37 @@
 # vi: set ft=ruby :
 
 #Prerequisites
-#vagrant plugin install vagrant-vbguest
-
+# --Plugins--
+# vagrant plugin install vagrant-vbguest
+# (optional) vagrant plugin install vagrant-rackspace
+#
+# --Boxes--
+# vagrant box add centos6_64 https://opscode-vm.s3.amazonaws.com/vagrant/opscode_centos-6.4_chef-11.4.4.box
+# echo -e "{\n    \"provider\": \"rackspace\"\n}\n" > metadata.json; tar czvf rackspace.box ./metadata.json 
+# vagrant box add centos6_64 rackspace.box 
 
 #Global Variables
 CHEF_SERVER_PROTOCOL="https"
 CHEF_SERVER_IP="192.168.50.2"
 CHEF_SERVER_PORT="4000"
-VAGRANTFILE_API_VERSION = "2"
+# Access chef server by browsing to https://192.168.50.2:4000
 
 # Setup chef server download cache
 host_cache_path = File.expand_path("../../.cache", __FILE__)
 guest_cache_path = "/var/chef/cache"
 FileUtils.mkdir(host_cache_path) unless File.exist?(host_cache_path)
 
+Vagrant.configure('2') do |config|
 
-Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
-
-	# Setup boxes as follows:
-	# vagrant box add centos6_64 https://opscode-vm.s3.amazonaws.com/vagrant/opscode_centos-6.4_chef-11.4.4.box
-	# echo -e "{\n    \"provider\": \"rackspace\"\n}\n" > metadata.json; tar czvf rackspace.box ./metadata.json 
-	# vagrant box add centos6_64 rackspace.box 
 	config.vm.box = 'centos6_64'
 	config.ssh.forward_agent = true	
+	config.vm.synced_folder host_cache_path, guest_cache_path # Allow /var/chef/cache caching
 
-	#
-	# Provisioners Virtualbox and Rackspace
-	#
+	# --Providers--
+	# Virtualbox and Rackspace
+	
 	config.vm.provider :virtualbox do |vb|
-		vb.vbguest.auto_update = true # Required to disable automatic update of guest additions
+		vb.vbguest.auto_update = true
 		vb.customize [
 			"modifyvm", :id,
 			"--nictype1", "Am79C973",
@@ -42,26 +44,23 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 		#vb.gui = true
 	end
 
-	Vagrant.require_plugin "vagrant-rackspace"
         config.vm.provider :rackspace do |rs|
                 rs.username = ""
                 rs.api_key = ""
                 rs.flavor = /512MB/
                 rs.image = /CentOS 6.4/
+
         end
 	
-	#Global Provisioning/Shared folders	
-	#Disable firewall (firewall rules would need added for production)
+	# --Provisioners--
 	config.vm.provision "shell", inline: "service iptables stop"
-	config.vm.synced_folder host_cache_path, guest_cache_path # Allow /var/chef/cache caching
 
 	# Chef Server	
-	config.vm.define "chefserver", primary: true do |chefserver|
+	config.vm.define "chefserver" do |chefserver|
 		chefserver.vm.host_name = "chefserver"
 		
 		#Network config
 		chefserver.vm.network "private_network", ip: CHEF_SERVER_IP
-		# Access chef server by browsing to https://192.168.50.2:4000
 		
 		#Shared folders
 		chefserver.vm.synced_folder "../etc-chef-server", "/etc/chef-server" #This is to allow the chef-client to retrieve the chef-server's chef-validator.pem file
