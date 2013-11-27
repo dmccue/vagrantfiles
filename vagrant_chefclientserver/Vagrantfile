@@ -69,21 +69,19 @@ Vagrant.configure('2') do |config|
 		# Install chef server using chef solo		
 		chefserver.vm.provision :chef_solo do |chef|
 			#chef.log_level = :debug
-			chef.cookbooks_path = "../cookbooks"	
+                        chef.cookbooks_path = "../my-recipes/cookbooks"
 			chef.provisioning_path = guest_cache_path # Cache downloaded chef servers in ../.cache
 			chef.add_recipe "chef-server"
 		
 	
 			chef.json = { 
-				:chef_server => {
+				:chef-server => {
+					:api_fqdn => "localhost",
 					:server_url => "#{CHEF_SERVER_PROTOCOL}://#{CHEF_SERVER_IP}:#{CHEF_SERVER_PORT}",
-					:webui_enabled => true
-				},
-				"chef-server" => {
-					"api_fqdn" => "localhost",
-					"configuration" => {
-						"nginx" => {
-							"ssl_port" => CHEF_SERVER_PORT
+                                        :webui_enabled => true,
+					:configuration => {
+						:nginx => {
+							:ssl_port => CHEF_SERVER_PORT
 						}
 					}
 				}
